@@ -17,6 +17,21 @@ struct CardIDPreferenceKey: PreferenceKey {
 }
 
 extension View {
+    /// Assigns a unique integer ID to this view so ``CardStack`` can identify
+    /// and reorder it within the card pile.
+    ///
+    /// Every card inside a ``CardStack`` must carry this modifier with a stable
+    /// ID. The stack uses these IDs internally to track which card is on top
+    /// and to respond to the `currentCard` binding.
+    ///
+    /// ```swift
+    /// CardStack(currentCard: $currentCard) {
+    ///     ForEach(items) { item in
+    ///         CardView(item: item)
+    ///             .cardID(item.id)
+    ///     }
+    /// }
+    /// ```
     public func cardID(_ id: Int) -> some View {
         preference(key: CardIDPreferenceKey.self, value: id)
     }

@@ -7,15 +7,58 @@
 
 import SwiftUI
 
+/// A swipeable card stack that lets users drag the top card to dismiss it,
+/// revealing the next card underneath.
+///
+/// `CardStack` turns any collection of views into an interactive pile of cards
+/// similar to Tinder's card deck. Each view receives a unique ID via the
+/// ``cardID(_:)`` modifier so the stack can track and reorder cards
+/// individually.
+///
+/// ```swift
+/// @State private var currentCard = 0
+///
+/// CardStack(currentCard: $currentCard) {
+///     ForEach(0..<10) { i in
+///         Text("Card \(i)")
+///             .cardID(i)
+///     }
+/// }
+/// ```
+///
+/// - Top card is draggable in any direction; releasing past `threshold`
+///   sends it to the bottom of the stack.
+/// - Cards beneath the top card are stacked with a slight vertical offset and
+///   a subtle rotation.
+/// - You can programmatically jump to any card by changing the `currentCard`
+///   binding.
+///
+/// > Important: Every card must have a unique, stable ID set with ``cardID(_:)``.
+///   The stack will not render until all cards have reported their IDs.
 public struct CardStack<Content: View>: View {
+    /// The ID of the card currently at the top of the stack.
+    ///
+    /// Write to this binding to programmatically bring a card to the top.
+    /// It is updated automatically after a swipe dismisses the top card.
     @Binding var currentCard: Int
+
     let content: Content
+
+    /// The minimum drag distance (in points) required to trigger a swipe-away.
+    /// Defaults to 100.
     let threshold: CGFloat
 
     @State private var cardOrder: [Int] = []
     @State private var idToIndex: [Int: Int] = [:]
     @State private var isReady = false
 
+    /// Creates a card stack.
+    ///
+    /// - Parameters:
+    ///   - currentCard: A binding to the ID of the card to show on top.
+    ///   - threshold: Minimum drag distance to trigger a swipe. Defaults to 100.
+    ///   - content: A `@ViewBuilder` that produces the card views. Each card
+    ///     must carry a ``cardID(_:)`` modifier with a unique, stable integer ID.
     public init(
         currentCard: Binding<Int>,
         threshold: CGFloat = 100,
