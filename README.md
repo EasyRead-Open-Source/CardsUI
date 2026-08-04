@@ -2,6 +2,8 @@
 
 A lightweight SwiftUI component that turns any collection of views into an interactive, swipeable card stack.
 
+![](./img/1.gif)
+
 ## Platforms
 
 - iOS 18+
