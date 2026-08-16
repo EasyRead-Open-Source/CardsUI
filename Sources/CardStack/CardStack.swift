@@ -49,8 +49,6 @@ public struct CardStack<Content: View>: View {
     let threshold: CGFloat
 
     @State private var cardOrder: [Int] = []
-    @State private var idToIndex: [Int: Int] = [:]
-    @State private var isReady = false
     @State private var sensoryTrigger = false
 
     /// Creates a card stack.
@@ -72,37 +70,34 @@ public struct CardStack<Content: View>: View {
 
     public var body: some View {
         Group(subviews: content) { subviews in
-            ZStack {
-                ForEach(Array(subviews.indices), id: \.self) { idx in
-                    subviews[idx]
-                        .opacity(0)
-                        .allowsHitTesting(false)
-                        .onPreferenceChange(CardIDPreferenceKey.self) { id in
-                            guard let id else { return }
-                            idToIndex[id] = idx
-                            tryReady()
-                        }
+            let reportedCardIDs = subviews.map { $0.containerValues.cardStackID }
+            let idToIndex = subviews.indices.reduce(into: [Int: Int]()) { result, index in
+                if let cardID = subviews[index].containerValues.cardStackID {
+                    result[cardID] = index
                 }
+            }
 
-                if isReady {
-                    ForEach(cardOrder, id: \.self) { cardID in
-                        if let idx = idToIndex[cardID], idx < subviews.count {
-                            let isTop = cardOrder.first == cardID
-                            subviews[idx]
-                                .modifier(CardDragModifier(
-                                    isTop: isTop,
-                                    baseZIndex: Double(cardOrder.count - (cardOrder.firstIndex(of: cardID) ?? 0)) + 100,
-                                    threshold: threshold,
-                                    onSwipedAway: {
-                                        moveTopToBottom()
-                                        sensoryTrigger.toggle()
-                                    }
-                                ))
-                                .offset(stackOffset(for: cardID))
-                                .rotationEffect(stackRotation(for: cardID))
-                        }
+            ZStack {
+                ForEach(cardOrder, id: \.self) { cardID in
+                    if let idx = idToIndex[cardID], idx < subviews.count {
+                        let isTop = cardOrder.first == cardID
+                        subviews[idx]
+                            .modifier(CardDragModifier(
+                                isTop: isTop,
+                                baseZIndex: Double(cardOrder.count - (cardOrder.firstIndex(of: cardID) ?? 0)) + 100,
+                                threshold: threshold,
+                                onSwipedAway: {
+                                    moveTopToBottom()
+                                    sensoryTrigger.toggle()
+                                }
+                            ))
+                            .offset(stackOffset(for: cardID))
+                            .rotationEffect(stackRotation(for: cardID))
                     }
                 }
+            }
+            .onChange(of: reportedCardIDs, initial: true) { _, cardIDs in
+                synchronizeCardOrder(with: cardIDs)
             }
         }
         .sensoryFeedback(.success, trigger: sensoryTrigger)
@@ -111,16 +106,24 @@ public struct CardStack<Content: View>: View {
         }
     }
 
-    private func tryReady() {
-        guard !isReady else { return }
-        guard idToIndex.count == contentSubviewsCount else { return }
-        isReady = true
-        cardOrder = idToIndex.sorted { $0.value < $1.value }.map(\.key)
-        bringToTop(currentCard)
-    }
-    
-    private var contentSubviewsCount: Int {
-        (idToIndex.values.max() ?? -1) + 1
+    private func synchronizeCardOrder(with reportedCardIDs: [Int?]) {
+        guard let snapshot = CardStackOrder(reportedCardIDs: reportedCardIDs) else {
+            if !cardOrder.isEmpty {
+                cardOrder = []
+            }
+            return
+        }
+
+        let nextOrder = snapshot.reconciling(
+            existingOrder: cardOrder,
+            currentCard: currentCard
+        )
+        if cardOrder != nextOrder {
+            cardOrder = nextOrder
+        }
+        if let topCard = nextOrder.first, !nextOrder.contains(currentCard) {
+            currentCard = topCard
+        }
     }
 
     private func moveTopToBottom() {
@@ -133,7 +136,11 @@ public struct CardStack<Content: View>: View {
     }
 
     private func bringToTop(_ id: Int) {
-        guard let idx = cardOrder.firstIndex(of: id), idx != 0 else { return }
+        guard let idx = cardOrder.firstIndex(of: id) else {
+            updateCurrentCard()
+            return
+        }
+        guard idx != 0 else { return }
         withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
             cardOrder.remove(at: idx)
             cardOrder.insert(id, at: 0)
@@ -141,8 +148,8 @@ public struct CardStack<Content: View>: View {
     }
 
     private func updateCurrentCard() {
-        guard !cardOrder.isEmpty else { return }
-        currentCard = cardOrder[0]
+        guard let topCard = cardOrder.first, currentCard != topCard else { return }
+        currentCard = topCard
     }
 
     private func stackOffset(for cardID: Int) -> CGSize {
@@ -153,5 +160,34 @@ public struct CardStack<Content: View>: View {
     private func stackRotation(for cardID: Int) -> Angle {
         guard let pos = cardOrder.firstIndex(of: cardID), pos > 0 else { return .zero }
         return .degrees(Double((cardID % 5) - 2) * 1.5)
+    }
+}
+
+struct CardStackOrder: Equatable {
+    let cardIDs: [Int]
+
+    init?(reportedCardIDs: [Int?]) {
+        let cardIDs = reportedCardIDs.compactMap { $0 }
+        guard cardIDs.count == reportedCardIDs.count,
+              Set(cardIDs).count == cardIDs.count
+        else { return nil }
+        self.cardIDs = cardIDs
+    }
+
+    func reconciling(existingOrder: [Int], currentCard: Int) -> [Int] {
+        let validCardIDs = Set(cardIDs)
+        var reconciledOrder = existingOrder.filter { validCardIDs.contains($0) }
+        var knownCardIDs = Set(reconciledOrder)
+        for cardID in cardIDs where knownCardIDs.insert(cardID).inserted {
+            reconciledOrder.append(cardID)
+        }
+
+        guard let index = reconciledOrder.firstIndex(of: currentCard), index > 0 else {
+            return reconciledOrder
+        }
+
+        let selectedCardID = reconciledOrder.remove(at: index)
+        reconciledOrder.insert(selectedCardID, at: 0)
+        return reconciledOrder
     }
 }
