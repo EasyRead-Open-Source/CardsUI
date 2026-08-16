@@ -51,6 +51,7 @@ public struct CardStack<Content: View>: View {
     @State private var cardOrder: [Int] = []
     @State private var idToIndex: [Int: Int] = [:]
     @State private var isReady = false
+    @State private var sensoryTrigger = false
 
     /// Creates a card stack.
     ///
@@ -92,7 +93,10 @@ public struct CardStack<Content: View>: View {
                                     isTop: isTop,
                                     baseZIndex: Double(cardOrder.count - (cardOrder.firstIndex(of: cardID) ?? 0)) + 100,
                                     threshold: threshold,
-                                    onSwipedAway: { moveTopToBottom() }
+                                    onSwipedAway: {
+                                        moveTopToBottom()
+                                        sensoryTrigger.toggle()
+                                    }
                                 ))
                                 .offset(stackOffset(for: cardID))
                                 .rotationEffect(stackRotation(for: cardID))
@@ -101,6 +105,7 @@ public struct CardStack<Content: View>: View {
                 }
             }
         }
+        .sensoryFeedback(.success, trigger: sensoryTrigger)
         .onChange(of: currentCard) { _, newID in
             bringToTop(newID)
         }
