@@ -105,7 +105,7 @@ public struct CardStack<Content: View>: View {
                 }
             }
         }
-        .sensoryFeedback(.tap, trigger: sensoryTrigger)
+        .sensoryFeedback(.selection, trigger: sensoryTrigger)
         .onChange(of: currentCard) { _, newID in
             bringToTop(newID)
         }
